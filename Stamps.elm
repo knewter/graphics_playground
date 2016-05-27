@@ -1,11 +1,24 @@
 module Stamps exposing (..)
 
+
 import Color exposing (..)
 import Collage exposing (..)
 import Element exposing (..)
 import Html exposing (..)
 import Html.App as Html
 import Mouse
+import Keyboard
+
+
+type Shape
+  = Pentagon
+  | Circle
+
+
+type alias Stamp =
+  { position : (Int, Int)
+  , shape : Shape
+  }
 
 
 type alias Position =
@@ -13,17 +26,21 @@ type alias Position =
 
 
 type alias Model =
-  { clicks : List Position
+  { stamps : List Stamp
+  , shift : Bool
   }
 
 
 type Msg
   = AddClick Position
+  | HandleShift Bool
+  | NoOp
 
 
 model : Model
 model =
-  { clicks = clicks
+  { stamps = []
+  , shift = False
   }
 
 
@@ -31,18 +48,35 @@ update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
     AddClick pos ->
-      { model | clicks = pos :: model.clicks } ! []
+      let
+        newStamp =
+          if model.shift then
+            Stamp pos Pentagon
+          else
+            Stamp pos Circle
+      in
+        { model | stamps = newStamp :: model.stamps } ! []
+
+    HandleShift pressed ->
+      { model | shift = pressed } ! []
+
+    NoOp ->
+      model ! []
 
 
--- drawStamp takes a position and return a graphics form
-drawStamp : (Int, Int) -> Form
-drawStamp (x, y) =
-  -- Let's draw a polygon with a radius of 50
-  ngon 5 50
-  -- Fill it red
-  |> filled red
-  -- And move it to the appropriate position
-  |> move (toFloat(x), toFloat(-1 * y))
+drawStamp : Stamp -> Form
+drawStamp stamp =
+  let
+    -- We'll extract x and y
+    (x, y) = stamp.position
+    -- and we'll make a different shape based on the stamp's shape
+    shape = case stamp.shape of
+      Pentagon -> ngon 5 50
+      Circle -> circle 50
+  in
+    shape
+    |> filled red
+    |> move (toFloat(x), toFloat(-y))
 
 
 view : Model -> Html Msg
@@ -51,7 +85,7 @@ view model =
     theGroup =
       -- Map a list of positions through our drawstamp function to get a list
       -- of forms, and put them in a group
-      group (List.map drawStamp model.clicks)
+      group (List.map drawStamp model.stamps)
 
     -- We'll move the group to the origin like we did in the previous examples
     originGroup =
@@ -61,12 +95,6 @@ view model =
     collage 800 800
       [ originGroup ]
       |> Element.toHtml
-
-
-clicks : List (Int, Int)
-clicks =
-  -- We'll just hardcode a list of positions
-  [(0, 0), (100, 100), (200, 100)]
 
 
 main : Program Never
@@ -79,6 +107,23 @@ main =
     }
 
 
+mapKeyDown : Int -> Msg
+mapKeyDown keyCode =
+  case Debug.log "mapKeyDown" keyCode of
+    16 -> HandleShift True
+    _  -> NoOp
+
+mapKeyUp : Int -> Msg
+mapKeyUp keyCode =
+  case Debug.log "mapKeyUp" keyCode of
+    16 -> HandleShift False
+    _  -> NoOp
+
+
 subscriptions : Model -> Sub Msg
 subscriptions model =
-  Mouse.clicks (\{x, y} -> AddClick (x, y))
+  Sub.batch
+    [ Mouse.clicks (\{x, y} -> AddClick (x, y))
+    , Keyboard.downs mapKeyDown
+    , Keyboard.ups mapKeyUp
+    ]
